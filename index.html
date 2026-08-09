@@ -155,9 +155,9 @@
         flex: 1;
         background: transparent;
         color: var(--navy-700);
-        font-size: 20px;
+        font-size: 16px; /* 4개 탭이 한 줄에 들어가도록 폰트 조정 */
         font-weight: 700;
-        padding: 13px 4px;
+        padding: 13px 2px;
         border-radius: 999px;
         box-shadow: none;
         white-space: nowrap;
@@ -192,7 +192,7 @@
     }
 
     .search-area button {
-        width: 100px;
+        width: 90px;
         margin-bottom: 0;
         font-size: 17px;
         padding: 0;
@@ -225,6 +225,12 @@
         box-shadow: 0 3px 14px rgba(11, 42, 74, 0.07);
         margin-bottom: 18px;
         border-left: 6px solid var(--navy-900);
+    }
+
+    /* 전체 보기용 심플 카드 */
+    .card.simple-card {
+        padding: 16px 20px;
+        margin-bottom: 10px;
     }
 
     .card-title {
@@ -401,11 +407,12 @@
         <div class="tabs">
             <button id="tab-substation" class="tab-btn active">변전소명</button>
             <button id="tab-region" class="tab-btn">지역명</button>
-            <button id="tab-address" class="tab-btn">주소로 지도보기</button>
+            <button id="tab-address" class="tab-btn">주소</button>
+            <button id="tab-all" class="tab-btn">전체</button>
         </div>
 
         <!-- 검색 입력창 & 버튼 -->
-        <div class="search-area">
+        <div class="search-area" id="search-area">
             <div class="search-wrap">
                 <span class="search-icon">🔍</span>
                 <input type="text" id="search-input" placeholder="예: 가락, 마포, 신길">
@@ -429,22 +436,12 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbw42mXcNkti5dTKKXo-dNpocNZyHNqcA7dIH_AQw2SQA5uRiRsJ1dBTu23iioWsZsI/exec";
         const TARGET_HASH = "698eddbc91b225fd427a99e6d0c194e32cb8c99dd4322cb25c5cd52c52184ef2";
 
-        // OpenInfraMap: 전력 인프라 전용 지도.
-        // ⚠ 실사용 중 확인된 사실: openinframap.org는 X-Frame-Options:deny 를 내려보내
-        //   페이지 안(iframe)에는 표시할 수 없고, /search/typeahead API도 CORS를
-        //   허용하지 않아 브라우저에서 직접 fetch() 할 수 없습니다.
-        //   → 미리보기 지도로는 쓸 수 없고, "새 창에서 열기" 링크(실제 페이지 이동)로만 사용합니다.
         const OIM_BASE = "https://openinframap.org";
         const OIM_ZOOM_SUBSTATION = 16;
         const OIM_ZOOM_ADDRESS = 13;
 
-        // IRONWEB: 보조 링크로만 사용 (자동 줌인 미지원, 새 창에서 열기 전용)
         const IRONWEB_URL = "https://www.mav-ash.com/ironweb/?hl=ko-KR";
-
-        // 미리보기(iframe)는 임베드가 공식 허용된 OpenStreetMap 위젯을 사용합니다.
         const OSM_EMBED_URL = "https://www.openstreetmap.org/export/embed.html";
-
-        // 주소 → 좌표 변환용 (무료 공개 Nominatim API, CORS 허용됨)
         const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
         // ----------------------------------------------------
@@ -453,7 +450,7 @@
         let globalData = [];
         let isDataLoaded = false;
         let currentTab = 'substation';
-        let searchToken = 0; // 비동기 지도 로딩 경쟁 상태 방지용
+        let searchToken = 0; 
         const mapCache = {};
 
         // ----------------------------------------------------
@@ -501,7 +498,6 @@
             return `${OIM_BASE}/#${zoom}/${lat}/${lng}`;
         }
 
-        // OSM 공식 임베드 위젯 URL (미리보기용). delta가 클수록 더 넓은 범위를 보여줍니다.
         function buildOsmEmbedUrl(lat, lng, delta) {
             const minLon = lng - delta;
             const maxLon = lng + delta;
@@ -511,7 +507,6 @@
             return `${OSM_EMBED_URL}?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(lat + ',' + lng)}`;
         }
 
-        // 일반 주소/지명 좌표 변환 (OpenStreetMap Nominatim, 무료 공개 API — CORS 허용됨)
         async function geocodeNominatimRaw(query) {
             const cacheKey = `nom:${query}`;
             if (cacheKey in mapCache) return mapCache[cacheKey];
@@ -530,9 +525,6 @@
             return result;
         }
 
-        // 주소 하나로 안 될 때, 뒤 단어부터 하나씩 줄여가며 재시도합니다.
-        // 예: "서울특별시 금천구 범안로17길 41" 실패 시
-        //     → "서울특별시 금천구 범안로17길" → "서울특별시 금천구" 순으로 재시도
         async function geocodeNominatim(query) {
             const tokens = query.trim().split(/\s+/);
             const minLen = Math.min(2, tokens.length);
@@ -540,7 +532,7 @@
                 const attempt = tokens.slice(0, len).join(' ');
                 const result = await geocodeNominatimRaw(attempt);
                 if (result) {
-                    result.approx = len < tokens.length; // 원문 일부만으로 찾은 경우
+                    result.approx = len < tokens.length; 
                     return result;
                 }
                 if (len > minLen) await sleep(300);
@@ -548,7 +540,6 @@
             return null;
         }
 
-        // 변전소명 → 좌표 (Nominatim 지오코딩)
         async function resolveSubstationLocation(name, region) {
             let coord = await geocodeNominatimRaw(`${name}변전소`);
             if (!coord) { await sleep(300); coord = await geocodeNominatim(region); }
@@ -557,7 +548,7 @@
         }
 
         // ----------------------------------------------------
-        // 로그인
+        // 로그인 및 탭 전환
         // ----------------------------------------------------
         async function handleLogin() {
             const pwd = document.getElementById('pwd-input').value;
@@ -579,34 +570,49 @@
         document.getElementById('tab-substation').addEventListener('click', () => switchTab('substation'));
         document.getElementById('tab-region').addEventListener('click', () => switchTab('region'));
         document.getElementById('tab-address').addEventListener('click', () => switchTab('address'));
+        document.getElementById('tab-all').addEventListener('click', () => switchTab('all'));
 
-        function switchTab(tabName) {
+        async function switchTab(tabName) {
             currentTab = tabName;
             const searchInput = document.getElementById('search-input');
             const searchBtn = document.getElementById('search-btn');
+            const searchArea = document.getElementById('search-area');
 
-            ['substation', 'region', 'address'].forEach(name => {
+            ['substation', 'region', 'address', 'all'].forEach(name => {
                 document.getElementById(`tab-${name}`).classList.toggle('active', name === tabName);
             });
 
-            if (tabName === 'substation') {
-                searchInput.placeholder = "예: 가락, 마포, 신길";
-                searchBtn.textContent = "검색";
-            } else if (tabName === 'region') {
-                searchInput.placeholder = "예: 서울, 송파, 가락동";
-                searchBtn.textContent = "검색";
+            if (tabName === 'all') {
+                searchArea.style.display = 'none'; // '전체' 탭에서는 검색창 숨김
+                if (!isDataLoaded) {
+                    await fetchAndSearch('', true);
+                } else {
+                    renderAllList();
+                }
             } else {
-                searchInput.placeholder = "예: 서울 중구 세종대로 110";
-                searchBtn.textContent = "지도보기";
-            }
+                searchArea.style.display = 'flex'; // 다른 탭에서는 검색창 보임
+                
+                if (tabName === 'substation') {
+                    searchInput.placeholder = "예: 가락, 마포, 신길";
+                    searchBtn.textContent = "검색";
+                } else if (tabName === 'region') {
+                    searchInput.placeholder = "예: 서울, 송파, 가락동";
+                    searchBtn.textContent = "검색";
+                } else if (tabName === 'address') {
+                    searchInput.placeholder = "예: 서울 중구 세종대로 110";
+                    searchBtn.textContent = "지도보기";
+                }
 
-            searchInput.value = "";
-            setMsg(document.getElementById('results-container'), `<div class="msg-box">검색어를 입력해주세요.</div>`);
-            searchInput.focus();
+                searchInput.value = "";
+                setMsg(document.getElementById('results-container'), `<div class="msg-box">검색어를 입력해주세요.</div>`);
+                searchInput.focus();
+            }
         }
 
-        // 최초 검색 시 서버에서 여유용량 데이터 가져오기
-        async function fetchAndSearch(keyword) {
+        // ----------------------------------------------------
+        // 데이터 패치
+        // ----------------------------------------------------
+        async function fetchAndSearch(keyword, isAllTab = false) {
             const container = document.getElementById('results-container');
             setMsg(container, `<div class="msg-box loading">데이터를 불러오는 중입니다...</div>`);
 
@@ -617,7 +623,12 @@
                 if (json.status === "success") {
                     globalData = json.data;
                     isDataLoaded = true;
-                    renderResults(keyword);
+                    
+                    if (isAllTab) {
+                        renderAllList();
+                    } else {
+                        renderResults(keyword);
+                    }
                 } else {
                     setMsg(container, `<div class="msg-box error">데이터 로드 실패: ${escapeHtml(json.message)}</div>`);
                 }
@@ -651,6 +662,46 @@
         document.getElementById('search-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') executeSearch();
         });
+
+        // ----------------------------------------------------
+        // 전체 리스트 보기 렌더링 (가나다 정렬)
+        // ----------------------------------------------------
+        function renderAllList() {
+            searchToken += 1;
+            const container = document.getElementById('results-container');
+            container.innerHTML = "";
+
+            // 시도 > 시군구 > 변전소명 순서대로 정렬
+            const sortedData = [...globalData].sort((a, b) => {
+                const regionA = a.region || "";
+                const regionB = b.region || "";
+                if (regionA !== regionB) {
+                    return regionA.localeCompare(regionB, 'ko-KR');
+                }
+                const subA = a.substation || "";
+                const subB = b.substation || "";
+                return subA.localeCompare(subB, 'ko-KR');
+            });
+
+            if (sortedData.length === 0) {
+                setMsg(container, `<div class="msg-box">데이터가 없습니다.</div>`);
+                return;
+            }
+
+            // 단순 스크롤용 심플 카드 리스트 생성
+            let html = ``;
+            sortedData.forEach(item => {
+                html += `
+                    <div class="card simple-card">
+                        <div class="card-title" style="font-size: 20px; margin-bottom: 2px;">${escapeHtml(item.substation)} 변전소</div>
+                        <div class="card-region" style="font-size: 15px; margin-bottom: 0;">${escapeHtml(item.region)}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+            container.insertAdjacentHTML('beforeend', ironwebCardHtml());
+        }
 
         // ----------------------------------------------------
         // 변전소명 / 지역명 검색 결과 렌더링
@@ -772,7 +823,7 @@
                     box.innerHTML = `<div class="map-status">위치를 찾지 못했습니다.</div>`;
                 }
 
-                await sleep(300); // 공개 API 연속 호출 간격 예의
+                await sleep(300); 
             }
         }
 
