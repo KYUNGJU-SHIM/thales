@@ -164,7 +164,7 @@
         // 설정 영역
         // ----------------------------------------------------
         // 1. 앱스 스크립트 웹 앱 배포 URL을 여기에 붙여넣으세요.
-        const API_URL = "https://script.google.com/macros/s/AKfycbxJmeIJ-wDb0LO3XSvkGWWE6z9YhO1Yr9n-lc0-NTS56_omO-XChsDgnUvr8nXRaBA/exec"; 
+        const API_URL = "https://script.google.com/macros/s/AKfycbw42mXcNkti5dTKKXo-dNpocNZyHNqcA7dIH_AQw2SQA5uRiRsJ1dBTu23iioWsZsI/exec"; 
         
         // 2. 비밀번호 해시값 설정 (기본값 "1234")
         // 다른 비밀번호 해시값을 원하시면 브라우저 콘솔에서 await sha256("원하는비번")을 쳐서 추출 후 교체하세요.
@@ -287,10 +287,30 @@
                 return;
             }
 
-            // 모바일 화면의 시각적 부담을 줄이기 위해 향후 2년(0, 1 인덱스) 데이터만 기본 노출
+            // 데이터 노출
+            // 2026 ~ 2032 전체 데이터 노출
             filteredData.forEach(item => {
                 const card = document.createElement('div');
                 card.className = "card";
+                
+                let kv23Html = "";
+                let kv154Html = "";
+
+                // 7개년 데이터를 반복문으로 HTML 구조로 만들기
+                item.years.forEach((year, index) => {
+                    kv23Html += `
+                        <div class="data-row">
+                            <span>${year}년</span>
+                            <span class="capacity">${item.kv23[index]} MW</span>
+                        </div>
+                    `;
+                    kv154Html += `
+                        <div class="data-row">
+                            <span>${year}년</span>
+                            <span class="capacity">${item.kv154[index]} MW</span>
+                        </div>
+                    `;
+                });
                 
                 card.innerHTML = `
                     <div class="card-title">${item.substation} 변전소</div>
@@ -298,26 +318,12 @@
                     
                     <div style="background:#f0f0f0; padding:10px; border-radius:8px; margin-bottom:10px;">
                         <strong style="font-size:20px; color:#333;">23kV 여유용량</strong>
-                        <div class="data-row">
-                            <span>${item.year0}년</span>
-                            <span class="capacity">${item.kv23_0} MW</span>
-                        </div>
-                        <div class="data-row">
-                            <span>${item.year1}년</span>
-                            <span class="capacity">${item.kv23_1} MW</span>
-                        </div>
+                        ${kv23Html}
                     </div>
 
                     <div style="background:#f0f0f0; padding:10px; border-radius:8px;">
                         <strong style="font-size:20px; color:#333;">154kV 여유용량</strong>
-                        <div class="data-row">
-                            <span>${item.year0}년</span>
-                            <span class="capacity">${item.kv154_0} MW</span>
-                        </div>
-                        <div class="data-row">
-                            <span>${item.year1}년</span>
-                            <span class="capacity">${item.kv154_1} MW</span>
-                        </div>
+                        ${kv154Html}
                     </div>
                 `;
                 container.appendChild(card);
