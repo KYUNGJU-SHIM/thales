@@ -173,8 +173,9 @@
             <button id="search-btn">검색</button>
         </div>
         
-        <div id="loading">데이터를 불러오는 중입니다...</div>
-        <div id="results-container"></div>
+        <div id="results-container">
+            <div class="msg-box">검색어를 입력해주세요.</div>
+        </div>
     </div>
 
     <script>
@@ -213,7 +214,6 @@
             if (hashedPwd === TARGET_HASH) {
                 document.getElementById('login-view').style.display = 'none';
                 document.getElementById('main-view').style.display = 'block';
-                fetchData(); 
             } else {
                 document.getElementById('login-error').style.display = 'block';
             }
