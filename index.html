@@ -177,22 +177,19 @@
             <div class="msg-box">검색어를 입력해주세요.</div>
         </div>
     </div>
-
     <script>
         // ----------------------------------------------------
         // 설정 영역
         // ----------------------------------------------------
-        // 1. 웹 앱 배포 URL
         const API_URL = "https://script.google.com/macros/s/AKfycbw42mXcNkti5dTKKXo-dNpocNZyHNqcA7dIH_AQw2SQA5uRiRsJ1dBTu23iioWsZsI/exec"; 
-        
-        // 2. 3220의 SHA-256 해시값 (터미널에서 추출한 값으로 변경하세요)
         const TARGET_HASH = "698eddbc91b225fd427a99e6d0c194e32cb8c99dd4322cb25c5cd52c52184ef2"; 
 
         // ----------------------------------------------------
         // 전역 상태 변수
         // ----------------------------------------------------
         let globalData = [];
-        let currentTab = 'substation'; // 변전소명 탭 기본값
+        let isDataLoaded = false; 
+        let currentTab = 'substation'; 
 
         // ----------------------------------------------------
         // 유틸리티: SHA-256 해시 함수
@@ -204,9 +201,6 @@
             return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
-        // ----------------------------------------------------
-        // 이벤트: 로그인 처리 (엔터키 지원 포함)
-        // ----------------------------------------------------
         async function handleLogin() {
             const pwd = document.getElementById('pwd-input').value;
             const hashedPwd = await sha256(pwd);
@@ -224,9 +218,6 @@
             if (e.key === 'Enter') handleLogin();
         });
 
-        // ----------------------------------------------------
-        // 이벤트: 탭 전환 처리
-        // ----------------------------------------------------
         document.getElementById('tab-substation').addEventListener('click', () => switchTab('substation'));
         document.getElementById('tab-region').addEventListener('click', () => switchTab('region'));
 
@@ -245,16 +236,49 @@
             }
             
             searchInput.value = ""; 
-            renderResults(); // 탭 전환 시 전체 목록으로 초기화
+            // 💡 탭을 바꿀 때도 무조건 '검색어를 입력해주세요'로 초기화
+            document.getElementById('results-container').innerHTML = `<div class="msg-box">검색어를 입력해주세요.</div>`;
             searchInput.focus();
         }
 
-        // ----------------------------------------------------
-        // 이벤트: 수동 검색 실행 (버튼 클릭 및 엔터키)
-        // ----------------------------------------------------
-        function executeSearch() {
+        // 최초 검색 시 서버에서 데이터 가져오기
+        async function fetchAndSearch(keyword) {
+            const container = document.getElementById('results-container');
+            container.innerHTML = `<div class="msg-box" style="color:var(--primary);">데이터를 불러오는 중입니다... 잠시만 기다려주세요.</div>`;
+
+            try {
+                const response = await fetch(API_URL);
+                const json = await response.json();
+                
+                if (json.status === "success") {
+                    globalData = json.data;
+                    isDataLoaded = true; 
+                    renderResults(keyword); // 데이터 로드 완료 후 검색 결과 렌더링
+                } else {
+                    container.innerHTML = `<div class="msg-box" style="color:#D32F2F;">데이터 로드 실패: ${json.message}</div>`;
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="msg-box" style="color:#D32F2F;">서버와 연결할 수 없습니다.</div>`;
+            }
+        }
+
+        async function executeSearch() {
             const keyword = document.getElementById('search-input').value.trim();
-            renderResults(keyword);
+            const container = document.getElementById('results-container');
+
+            // (1) 검색어가 비어있다면 무조건 안내 문구 출력
+            if (keyword === "") {
+                container.innerHTML = `<div class="msg-box">검색어를 입력해주세요.</div>`;
+                return;
+            }
+
+            // (2) 아직 데이터를 안 가져왔다면 최초 1회만 데이터 로드 후 검색
+            if (!isDataLoaded) {
+                await fetchAndSearch(keyword);
+            } else {
+                // (3) 이미 데이터가 있다면 바로 필터링해서 결과 또는 '검색 결과가 없습니다' 노출
+                renderResults(keyword);
+            }
         }
 
         document.getElementById('search-btn').addEventListener('click', executeSearch);
@@ -262,42 +286,17 @@
             if (e.key === 'Enter') executeSearch();
         });
 
-        // ----------------------------------------------------
-        // 데이터 로드 함수
-        // ----------------------------------------------------
-        async function fetchData() {
-            const loading = document.getElementById('loading');
-            loading.style.display = 'block';
-            
-            try {
-                const response = await fetch(API_URL);
-                const json = await response.json();
-                
-                if (json.status === "success") {
-                    globalData = json.data;
-                    renderResults(); 
-                } else {
-                    alert("데이터를 불러오지 못했습니다: " + json.message);
-                }
-            } catch (error) {
-                alert("서버와 연결할 수 없습니다. 관리자에게 문의하세요.");
-            } finally {
-                loading.style.display = 'none';
-            }
-        }
-
+        
         // ----------------------------------------------------
         // 결과 렌더링 함수 (카드 UI 7개년 생성)
         // ----------------------------------------------------
-        function renderResults(keyword = "") {
+        function renderResults(keyword) {
             const container = document.getElementById('results-container');
             container.innerHTML = ""; 
 
             const searchKey = keyword.toLowerCase();
             
             const filteredData = globalData.filter(item => {
-                if (searchKey === "") return true;
-                
                 if (currentTab === 'region') {
                     return item.region.toLowerCase().includes(searchKey);
                 } else {
@@ -305,12 +304,12 @@
                 }
             });
 
+            // (3) 검색 결과가 없을 때의 명확한 처리
             if (filteredData.length === 0) {
-                container.innerHTML = `<p style="text-align:center; font-size: 22px; margin-top:20px;">검색 결과가 없습니다.</p>`;
+                container.innerHTML = `<div class="msg-box" style="color:#555;">검색 결과가 없습니다.</div>`;
                 return;
             }
 
-            // 7개년 데이터 전체 노출
             filteredData.forEach(item => {
                 const card = document.createElement('div');
                 card.className = "card";
@@ -338,7 +337,7 @@
                     <div class="card-region">${item.region}</div>
                     
                     <div style="background:#f0f0f0; padding:10px; border-radius:8px; margin-bottom:10px;">
-                        <strong style="font-size:20px; color:#333;">22.9kV 여유용량</strong>
+                        <strong style="font-size:20px; color:#333;">23kV 여유용량</strong>
                         ${kv23Html}
                     </div>
 
