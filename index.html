@@ -666,6 +666,9 @@
         // ----------------------------------------------------
         // 전체 리스트 보기 렌더링 (가나다 정렬)
         // ----------------------------------------------------
+        // ----------------------------------------------------
+        // 전체 리스트 보기 렌더링 (아코디언 방식)
+        // ----------------------------------------------------
         function renderAllList() {
             searchToken += 1;
             const container = document.getElementById('results-container');
@@ -688,19 +691,103 @@
                 return;
             }
 
-            // 단순 스크롤용 심플 카드 리스트 생성
             let html = ``;
-            sortedData.forEach(item => {
+            sortedData.forEach((item, idx) => {
+                let kv23Html = "";
+                let kv154Html = "";
+
+                (item.years || []).forEach((year, i) => {
+                    kv23Html += `
+                        <div class="data-row">
+                            <span>${escapeHtml(year)}년</span>
+                            <span class="capacity">${escapeHtml(item.kv23[i])} MW</span>
+                        </div>`;
+                    kv154Html += `
+                        <div class="data-row">
+                            <span>${escapeHtml(year)}년</span>
+                            <span class="capacity">${escapeHtml(item.kv154[i])} MW</span>
+                        </div>`;
+                });
+
+                // 클릭 이벤트에 안전하게 텍스트를 전달하기 위한 처리
+                const safeSub = escapeHtml(item.substation).replace(/'/g, "\\'");
+                const safeReg = escapeHtml(item.region).replace(/'/g, "\\'");
+
                 html += `
-                    <div class="card simple-card">
-                        <div class="card-title" style="font-size: 20px; margin-bottom: 2px;">${escapeHtml(item.substation)} 변전소</div>
-                        <div class="card-region" style="font-size: 15px; margin-bottom: 0;">${escapeHtml(item.region)}</div>
+                    <div class="card" style="padding: 16px 20px; margin-bottom: 12px;">
+                        <!-- 요약 헤더 (클릭 영역) -->
+                        <div onclick="toggleAccordion(this, ${idx}, '${safeSub}', '${safeReg}')" style="cursor: pointer; -webkit-tap-highlight-color: transparent;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="card-title" style="font-size: 21px; margin-bottom: 2px;">${escapeHtml(item.substation)} 변전소</div>
+                                <div class="accordion-arrow" style="font-size: 16px; color: var(--navy-700);">▼</div>
+                            </div>
+                            <div class="card-region" style="font-size: 16px; margin-bottom: 0;">${escapeHtml(item.region)}</div>
+                        </div>
+
+                        <!-- 숨겨진 상세 내용 (용량 + 지도) -->
+                        <div class="card-details" style="display: none; margin-top: 16px; border-top: 1px dashed var(--border); padding-top: 16px;">
+                            <div class="voltage-block">
+                                <span class="voltage-label">22.9kV 여유용량</span>
+                                ${kv23Html}
+                            </div>
+                            <div class="voltage-block">
+                                <span class="voltage-label">154kV 여유용량</span>
+                                ${kv154Html}
+                            </div>
+                            <div class="map-section">
+                                <div class="map-section-label">🗺️ 변전소 위치</div>
+                                <div class="map-box" id="map-all-${idx}" data-loaded="false">
+                                    <div class="map-status">지도 위치를 찾는 중...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 `;
             });
 
             container.innerHTML = html;
             container.insertAdjacentHTML('beforeend', ironwebCardHtml());
+        }
+
+        // ----------------------------------------------------
+        // 아코디언 열기/닫기 및 지도 지연 로딩
+        // ----------------------------------------------------
+        async function toggleAccordion(element, idx, substation, region) {
+            const card = element.closest('.card');
+            const details = card.querySelector('.card-details');
+            const arrow = element.querySelector('.accordion-arrow');
+
+            if (details.style.display === 'none') {
+                // 펼치기
+                details.style.display = 'block';
+                arrow.textContent = '▲';
+
+                // 지도가 아직 안 불려왔다면 지금 호출 (성능 최적화)
+                const mapBox = document.getElementById(`map-all-${idx}`);
+                if (mapBox && mapBox.getAttribute('data-loaded') === 'false') {
+                    mapBox.setAttribute('data-loaded', 'true');
+                    
+                    const loc = await resolveSubstationLocation(substation, region);
+                    if (loc) {
+                        const previewUrl = buildOsmEmbedUrl(loc.lat, loc.lng, 0.004);
+                        const oimUrl = buildOimUrl(loc.lat, loc.lng, OIM_ZOOM_SUBSTATION);
+                        mapBox.outerHTML = `
+                            <div class="map-box" id="map-all-${idx}" data-loaded="true">
+                                <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
+                                   aria-label="${escapeHtml(substation)} 변전소 위치, 새 창에서 크게 보기">
+                                    <iframe src="${previewUrl}" loading="lazy" tabindex="-1"></iframe>
+                                    <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
+                                </a>
+                            </div>`;
+                    } else {
+                        mapBox.innerHTML = `<div class="map-status">위치를 찾지 못했습니다.</div>`;
+                    }
+                }
+            } else {
+                // 접기
+                details.style.display = 'none';
+                arrow.textContent = '▼';
+            }
         }
 
         // ----------------------------------------------------
