@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <!-- 모바일 최적화 및 줌 비율 방지 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>한전 여유용량 조회</title>
+    <style>
+        /* 70대 맞춤형 시각/터치 요소 최적화 */
+        :root {
+            --primary: #0047AB; /* 높은 대비의 진한 파랑 */
+            --bg-color: #F8F9FA;
+            --text-color: #111111;
+            --border-radius: 12px;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        /* 공통 컴포넌트 */
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        input[type="password"], input[type="text"] {
+            width: 100%;
+            padding: 20px;
+            font-size: 22px; /* 큰 입력 글씨 */
+            border: 2px solid #ccc;
+            border-radius: var(--border-radius);
+            box-sizing: border-box;
+            margin-bottom: 20px;
+        }
+
+        button {
+            width: 100%;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+        }
+
+        button:active {
+            background-color: #003380;
+        }
+
+        /* 탭 디자인 */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            background-color: #E0E0E0;
+            color: #333;
+        }
+
+        .tab-btn.active {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        /* 카드 UI */
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            border-left: 6px solid var(--primary);
+        }
+
+        .card-title {
+            font-size: 26px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .card-region {
+            font-size: 18px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 20px;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .capacity {
+            font-weight: bold;
+            color: #D32F2F; /* 용량 수치 강조 (빨강) */
+        }
+
+        #loading {
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            color: var(--primary);
+            display: none;
+            margin-top: 30px;
+        }
+
+        /* 뷰 전환 처리 */
+        #main-view { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 화면 A: 로그인 뷰 -->
+    <div id="login-view" class="container">
+        <h1>여유용량 통합 검색</h1>
+        <p style="font-size: 18px; text-align: center;">담당자 확인을 위해<br>비밀번호를 입력해 주세요.</p>
+        <input type="password" id="pwd-input" placeholder="비밀번호 입력">
+        <button id="login-btn">접속하기</button>
+        <p id="login-error" style="color: red; font-size: 18px; text-align: center; display: none;">비밀번호가 일치하지 않습니다.</p>
+    </div>
+
+    <!-- 화면 B: 메인 검색 뷰 -->
+    <div id="main-view" class="container">
+        <!-- 탭 버튼 -->
+        <div class="tabs">
+            <button id="tab-region" class="tab-btn active">지역명 검색</button>
+            <button id="tab-substation" class="tab-btn">변전소명 검색</button>
+        </div>
+
+        <!-- 검색 입력창 -->
+        <input type="text" id="search-input" placeholder="예: 서울, 송파, 가락동">
+        
+        <!-- 로딩 및 결과 컨테이너 -->
+        <div id="loading">데이터를 불러오는 중입니다...</div>
+        <div id="results-container"></div>
+    </div>
+
+    <script>
+        // ----------------------------------------------------
+        // 설정 영역
+        // ----------------------------------------------------
+        // 1. 앱스 스크립트 웹 앱 배포 URL을 여기에 붙여넣으세요.
+        const API_URL = "여기에_발급받은_웹앱_URL_붙여넣기"; 
+        
+        // 2. 비밀번호 해시값 설정 (기본값 "1234")
+        // 다른 비밀번호 해시값을 원하시면 브라우저 콘솔에서 await sha256("원하는비번")을 쳐서 추출 후 교체하세요.
+        const TARGET_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"; 
+
+        // ----------------------------------------------------
+        // 전역 상태 변수
+        // ----------------------------------------------------
+        let globalData = [];
+        let currentTab = 'region'; // 'region' 또는 'substation'
+        let debounceTimer;
+
+        // ----------------------------------------------------
+        // 유틸리티: SHA-256 해시 함수
+        // ----------------------------------------------------
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // ----------------------------------------------------
+        // 이벤트: 로그인 처리
+        // ----------------------------------------------------
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const pwd = document.getElementById('pwd-input').value;
+            const hashedPwd = await sha256(pwd);
+
+            if (hashedPwd === TARGET_HASH) {
+                document.getElementById('login-view').style.display = 'none';
+                document.getElementById('main-view').style.display = 'block';
+                fetchData(); // 로그인 성공 시 데이터 호출
+            } else {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        });
+
+        // ----------------------------------------------------
+        // 이벤트: 탭 전환 처리
+        // ----------------------------------------------------
+        document.getElementById('tab-region').addEventListener('click', () => switchTab('region'));
+        document.getElementById('tab-substation').addEventListener('click', () => switchTab('substation'));
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            const searchInput = document.getElementById('search-input');
+            
+            if (tabName === 'region') {
+                document.getElementById('tab-region').classList.add('active');
+                document.getElementById('tab-substation').classList.remove('active');
+                searchInput.placeholder = "예: 서울, 송파, 가락동";
+            } else {
+                document.getElementById('tab-substation').classList.add('active');
+                document.getElementById('tab-region').classList.remove('active');
+                searchInput.placeholder = "예: 가락, 마포, 신길";
+            }
+            
+            searchInput.value = ""; // 탭 변경 시 입력어 초기화
+            renderResults(); // 결과 전체 노출로 초기화
+            searchInput.focus();
+        }
+
+        // ----------------------------------------------------
+        // 이벤트: 실시간 검색 (Debouncing 적용)
+        // ----------------------------------------------------
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const keyword = e.target.value.trim();
+            // 0.3초(300ms) 지연 후 검색 실행 (성능 최적화)
+            debounceTimer = setTimeout(() => renderResults(keyword), 300);
+        });
+
+        // ----------------------------------------------------
+        // 데이터 로드 함수
+        // ----------------------------------------------------
+        async function fetchData() {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            try {
+                const response = await fetch(API_URL);
+                const json = await response.json();
+                
+                if (json.status === "success") {
+                    globalData = json.data;
+                    renderResults(); // 최초 전체 리스트 렌더링
+                } else {
+                    alert("데이터를 불러오지 못했습니다: " + json.message);
+                }
+            } catch (error) {
+                alert("서버와 연결할 수 없습니다. 관리자에게 문의하세요.");
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // ----------------------------------------------------
+        // 결과 렌더링 함수 (카드 UI 생성)
+        // ----------------------------------------------------
+        function renderResults(keyword = "") {
+            const container = document.getElementById('results-container');
+            container.innerHTML = ""; // 기존 결과 지우기
+
+            const searchKey = keyword.toLowerCase();
+            
+            // 필터링
+            const filteredData = globalData.filter(item => {
+                if (searchKey === "") return true;
+                
+                if (currentTab === 'region') {
+                    return item.region.toLowerCase().includes(searchKey);
+                } else {
+                    return item.substation.toLowerCase().includes(searchKey);
+                }
+            });
+
+            if (filteredData.length === 0) {
+                container.innerHTML = `<p style="text-align:center; font-size: 22px; margin-top:20px;">검색 결과가 없습니다.</p>`;
+                return;
+            }
+
+            // 모바일 화면의 시각적 부담을 줄이기 위해 향후 2년(0, 1 인덱스) 데이터만 기본 노출
+            filteredData.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "card";
+                
+                card.innerHTML = `
+                    <div class="card-title">${item.substation} 변전소</div>
+                    <div class="card-region">${item.region}</div>
+                    
+                    <div style="background:#f0f0f0; padding:10px; border-radius:8px; margin-bottom:10px;">
+                        <strong style="font-size:20px; color:#333;">23kV 여유용량</strong>
+                        <div class="data-row">
+                            <span>${item.year0}년</span>
+                            <span class="capacity">${item.kv23_0} MW</span>
+                        </div>
+                        <div class="data-row">
+                            <span>${item.year1}년</span>
+                            <span class="capacity">${item.kv23_1} MW</span>
+                        </div>
+                    </div>
+
+                    <div style="background:#f0f0f0; padding:10px; border-radius:8px;">
+                        <strong style="font-size:20px; color:#333;">154kV 여유용량</strong>
+                        <div class="data-row">
+                            <span>${item.year0}년</span>
+                            <span class="capacity">${item.kv154_0} MW</span>
+                        </div>
+                        <div class="data-row">
+                            <span>${item.year1}년</span>
+                            <span class="capacity">${item.kv154_1} MW</span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
