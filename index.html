@@ -202,12 +202,6 @@
 
     .search-area button:active { background-color: #C6892C; }
 
-    .search-hint {
-        font-size: 14px;
-        color: var(--text-muted);
-        margin: 0 0 18px 2px;
-    }
-
     /* 안내 / 결과 없음 메시지 */
     .msg-box {
         background: var(--surface);
@@ -351,6 +345,26 @@
 
     .map-fallback-link { display: inline-block; margin-top: 10px; font-size: 15px; }
 
+    /* IRONWEB 바로가기 카드 */
+    .ironweb-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--surface);
+        padding: 20px 22px;
+        border-radius: var(--radius-lg);
+        box-shadow: 0 3px 14px rgba(11, 42, 74, 0.07);
+        border-left: 6px solid var(--amber-500);
+        text-decoration: none;
+        color: var(--navy-900);
+        font-size: 18px;
+        font-weight: 800;
+        margin-bottom: 18px;
+    }
+
+    .ironweb-card:active { background: var(--navy-050); }
+    .ironweb-arrow { font-size: 20px; color: var(--amber-500); }
+
     .address-note {
         font-size: 15px;
         color: var(--navy-700);
@@ -379,7 +393,7 @@
     <div id="main-view" class="container">
         <div class="page-header">
             <h1>⚡ 여유용량 통합 검색</h1>
-            <p>변전소명·지역명으로 여유용량을 확인하거나, 주소로 주변 변전소를 지도에서 찾아보세요.</p>
+            <p>변전소명·지역명·주소로 위치와 여유용량을 확인하세요.</p>
         </div>
 
         <!-- 탭 버튼 -->
@@ -397,10 +411,13 @@
             </div>
             <button id="search-btn">검색</button>
         </div>
-        <p class="search-hint" id="search-hint" style="display:none;">주소를 입력하면 주변 변전소를 지도에서 보여드려요. (예: 서울 중구 세종대로 110)</p>
 
         <div id="results-container">
             <div class="msg-box">검색어를 입력해주세요.</div>
+            <a class="ironweb-card" href="https://www.mav-ash.com/ironweb/?hl=ko-KR" target="_blank" rel="noopener">
+                <span>🗺️ 한글 변전소 지도 보러가기</span>
+                <span class="ironweb-arrow">↗</span>
+            </a>
         </div>
     </div>
 
@@ -466,6 +483,18 @@
         }
 
         function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+        function ironwebCardHtml() {
+            return `
+                <a class="ironweb-card" href="${IRONWEB_URL}" target="_blank" rel="noopener">
+                    <span>🗺️ 한글 변전소 지도 보러가기</span>
+                    <span class="ironweb-arrow">↗</span>
+                </a>`;
+        }
+
+        function setMsg(container, html) {
+            container.innerHTML = html + ironwebCardHtml();
+        }
 
         function buildOimUrl(lat, lng, zoom) {
             return `${OIM_BASE}/#${zoom}/${lat}/${lng}`;
@@ -554,7 +583,6 @@
             currentTab = tabName;
             const searchInput = document.getElementById('search-input');
             const searchBtn = document.getElementById('search-btn');
-            const hint = document.getElementById('search-hint');
 
             ['substation', 'region', 'address'].forEach(name => {
                 document.getElementById(`tab-${name}`).classList.toggle('active', name === tabName);
@@ -563,26 +591,23 @@
             if (tabName === 'substation') {
                 searchInput.placeholder = "예: 가락, 마포, 신길";
                 searchBtn.textContent = "검색";
-                hint.style.display = 'none';
             } else if (tabName === 'region') {
                 searchInput.placeholder = "예: 서울, 송파, 가락동";
                 searchBtn.textContent = "검색";
-                hint.style.display = 'none';
             } else {
                 searchInput.placeholder = "예: 서울 중구 세종대로 110";
                 searchBtn.textContent = "지도보기";
-                hint.style.display = 'block';
             }
 
             searchInput.value = "";
-            document.getElementById('results-container').innerHTML = `<div class="msg-box">검색어를 입력해주세요.</div>`;
+            setMsg(document.getElementById('results-container'), `<div class="msg-box">검색어를 입력해주세요.</div>`);
             searchInput.focus();
         }
 
         // 최초 검색 시 서버에서 여유용량 데이터 가져오기
         async function fetchAndSearch(keyword) {
             const container = document.getElementById('results-container');
-            container.innerHTML = `<div class="msg-box loading">데이터를 불러오는 중입니다... 잠시만 기다려주세요.</div>`;
+            setMsg(container, `<div class="msg-box loading">데이터를 불러오는 중입니다...</div>`);
 
             try {
                 const response = await fetch(API_URL);
@@ -593,10 +618,10 @@
                     isDataLoaded = true;
                     renderResults(keyword);
                 } else {
-                    container.innerHTML = `<div class="msg-box error">데이터 로드 실패: ${escapeHtml(json.message)}</div>`;
+                    setMsg(container, `<div class="msg-box error">데이터 로드 실패: ${escapeHtml(json.message)}</div>`);
                 }
             } catch (error) {
-                container.innerHTML = `<div class="msg-box error">서버와 연결할 수 없습니다.</div>`;
+                setMsg(container, `<div class="msg-box error">서버와 연결할 수 없습니다.</div>`);
             }
         }
 
@@ -605,7 +630,7 @@
             const container = document.getElementById('results-container');
 
             if (keyword === "") {
-                container.innerHTML = `<div class="msg-box">검색어를 입력해주세요.</div>`;
+                setMsg(container, `<div class="msg-box">검색어를 입력해주세요.</div>`);
                 return;
             }
 
@@ -647,7 +672,7 @@
             });
 
             if (filteredData.length === 0) {
-                container.innerHTML = `<div class="msg-box">검색 결과가 없습니다.</div>`;
+                setMsg(container, `<div class="msg-box">검색 결과가 없습니다.</div>`);
                 return;
             }
 
@@ -714,6 +739,8 @@
             if (mapTargets.length > 0) {
                 loadCardMapsSequentially(mapTargets, myToken);
             }
+
+            container.insertAdjacentHTML('beforeend', ironwebCardHtml());
         }
 
         async function loadCardMapsSequentially(targets, myToken) {
@@ -734,20 +761,14 @@
                     box.outerHTML = `
                         <div class="map-box" id="${target.boxId}">
                             <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
-                               aria-label="${escapeHtml(target.substation)} 변전소 위치, 새 창에서 전력 인프라 지도로 보기">
+                               aria-label="${escapeHtml(target.substation)} 변전소 위치, 새 창에서 크게 보기">
                                 <iframe src="${previewUrl}" loading="lazy" tabindex="-1"
                                         title="${escapeHtml(target.substation)} 변전소 위치"></iframe>
-                                <span class="map-open-badge">OpenInfraMap 새 창에서 보기 ↗</span>
+                                <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
                             </a>
-                        </div>
-                        <div class="map-caption">지도 위치 참고용(OSM) · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>`;
-                } else {
-                    box.innerHTML = `
-                        <div class="map-status">
-                            정확한 위치를 찾지 못했습니다.<br>
-                            <a class="map-fallback-link" href="${OIM_BASE}" target="_blank" rel="noopener">OpenInfraMap에서 직접 검색 ↗</a><br>
-                            <a class="map-fallback-link" href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서 직접 검색 ↗</a>
                         </div>`;
+                } else {
+                    box.innerHTML = `<div class="map-status">위치를 찾지 못했습니다.</div>`;
                 }
 
                 await sleep(300); // 공개 API 연속 호출 간격 예의
@@ -762,40 +783,33 @@
             const myToken = searchToken;
 
             const container = document.getElementById('results-container');
-            container.innerHTML = `<div class="msg-box loading">주소를 찾는 중입니다...</div>`;
+            setMsg(container, `<div class="msg-box loading">주소를 찾는 중입니다...</div>`);
 
             const coord = await geocodeNominatim(address);
 
             if (myToken !== searchToken) return;
 
             if (!coord) {
-                container.innerHTML = `
-                    <div class="msg-box error">
-                        주소를 찾지 못했습니다.<br>
-                        도로명 앞에 시/구를 정확히 붙여서(예: 서울특별시 금천구 범안로17길 41) 다시 입력해보시거나,<br>
-                        건물명·상세 번지는 빼고 도로명까지만 입력해보세요.
-                    </div>`;
+                setMsg(container, `<div class="msg-box error">주소를 찾지 못했습니다. 도로명까지만 다시 입력해보세요.</div>`);
                 return;
             }
 
             const previewUrl = buildOsmEmbedUrl(coord.lat, coord.lng, 0.012);
             const oimUrl = buildOimUrl(coord.lat, coord.lng, OIM_ZOOM_ADDRESS);
-            const approxNote = coord.approx ? `<div class="map-caption" style="margin-top:0;margin-bottom:8px;">※ 입력하신 주소 전체와 정확히 일치하지 않아, 일부만으로 찾은 근사 위치입니다.</div>` : ``;
+            const approxNote = coord.approx ? `<div class="map-caption" style="margin-top:0;margin-bottom:8px;">※ 근사 위치입니다</div>` : ``;
 
-            container.innerHTML = `
+            setMsg(container, `
                 <div class="card">
                     <div class="address-note">📍 ${escapeHtml(coord.label || address)}</div>
                     ${approxNote}
-                    <div class="map-section-label">🗺️ 주변 지도 미리보기</div>
                     <div class="map-box">
                         <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
-                           aria-label="주소 주변 지도, 새 창에서 전력 인프라 지도로 보기">
+                           aria-label="주소 주변 지도, 새 창에서 크게 보기">
                             <iframe src="${previewUrl}" loading="lazy" tabindex="-1" title="주소 주변 지도"></iframe>
-                            <span class="map-open-badge">OpenInfraMap 새 창에서 보기 ↗</span>
+                            <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
                         </a>
                     </div>
-                    <div class="map-caption">주변 변전소·송전선까지 보려면 위 버튼으로 OpenInfraMap을 열어보세요 · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>
-                </div>`;
+                </div>`);
         }
     </script>
 </body>
