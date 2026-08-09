@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<link rel="icon" type="image/jpeg" href="thales.jpeg">
 <title>한전 여유용량 조회</title>
 <link rel="stylesheet" as="style" crossorigin
       href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
@@ -138,10 +137,7 @@
     /* ---------- 메인 화면 ---------- */
     #main-view { display: none; }
 
-    .page-header {
-        margin-bottom: 22px;
-    }
-
+    .page-header { margin-bottom: 22px; }
     .page-header h1 { text-align: left; font-size: 25px; margin-bottom: 4px; }
     .page-header p { margin: 0; font-size: 15px; color: var(--text-muted); }
 
@@ -159,11 +155,12 @@
         flex: 1;
         background: transparent;
         color: var(--navy-700);
-        font-size: 17px;
+        font-size: 15px;
         font-weight: 700;
-        padding: 13px 0;
+        padding: 13px 4px;
         border-radius: 999px;
         box-shadow: none;
+        white-space: nowrap;
     }
 
     .tab-btn:active { transform: none; background: transparent; }
@@ -175,17 +172,12 @@
     }
 
     /* 검색 영역 */
-    .search-area {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 22px;
-    }
+    .search-area { display: flex; gap: 10px; margin-bottom: 12px; }
 
     .search-area input[type="text"] {
         margin-bottom: 0;
         flex: 1;
         padding-left: 46px;
-        background-image: none;
     }
 
     .search-wrap { position: relative; flex: 1; }
@@ -200,15 +192,21 @@
     }
 
     .search-area button {
-        width: 92px;
+        width: 100px;
         margin-bottom: 0;
-        font-size: 18px;
+        font-size: 17px;
         padding: 0;
         background-color: var(--amber-500);
         color: var(--navy-900);
     }
 
     .search-area button:active { background-color: #C6892C; }
+
+    .search-hint {
+        font-size: 14px;
+        color: var(--text-muted);
+        margin: 0 0 18px 2px;
+    }
 
     /* 안내 / 결과 없음 메시지 */
     .msg-box {
@@ -242,11 +240,7 @@
         letter-spacing: -0.3px;
     }
 
-    .card-region {
-        font-size: 17px;
-        color: var(--text-muted);
-        margin-bottom: 16px;
-    }
+    .card-region { font-size: 17px; color: var(--text-muted); margin-bottom: 16px; }
 
     mark.hl {
         background: var(--highlight-bg);
@@ -292,11 +286,7 @@
     }
 
     /* 지도 영역 */
-    .map-section {
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid var(--border);
-    }
+    .map-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 
     .map-section-label {
         font-size: 16px;
@@ -320,22 +310,13 @@
         justify-content: center;
     }
 
-    .map-status {
-        font-size: 15px;
-        color: var(--navy-700);
-        text-align: center;
-        padding: 20px;
-    }
+    .map-status { font-size: 15px; color: var(--navy-700); text-align: center; padding: 20px; }
 
-    .map-frame-link {
-        display: block;
-        position: relative;
-        text-decoration: none;
-    }
+    .map-frame-link { display: block; position: relative; text-decoration: none; }
 
     .map-frame-link iframe {
         width: 100%;
-        height: 200px;
+        height: 220px;
         border: 0;
         display: block;
         pointer-events: none;
@@ -357,18 +338,26 @@
     .map-caption {
         font-size: 13px;
         color: var(--text-muted);
-        margin-top: 6px;
+        margin-top: 8px;
         text-align: center;
     }
 
-    .map-fallback-link {
-        display: inline-block;
-        margin-top: 10px;
-        font-size: 15px;
-        font-weight: 700;
+    .map-caption a, .map-fallback-link {
         color: var(--navy-900);
+        font-weight: 700;
         text-decoration: none;
         border-bottom: 2px solid var(--amber-500);
+    }
+
+    .map-fallback-link { display: inline-block; margin-top: 10px; font-size: 15px; }
+
+    .address-note {
+        font-size: 15px;
+        color: var(--navy-700);
+        background: var(--navy-050);
+        border-radius: var(--radius-sm);
+        padding: 10px 14px;
+        margin-bottom: 12px;
     }
 </style>
 </head>
@@ -390,13 +379,14 @@
     <div id="main-view" class="container">
         <div class="page-header">
             <h1>⚡ 여유용량 통합 검색</h1>
-            <p>변전소명 또는 지역명으로 22.9kV·154kV 여유용량을 확인하세요.</p>
+            <p>변전소명·지역명으로 여유용량을 확인하거나, 주소로 주변 변전소를 지도에서 찾아보세요.</p>
         </div>
 
         <!-- 탭 버튼 -->
         <div class="tabs">
-            <button id="tab-substation" class="tab-btn active">변전소명 검색</button>
-            <button id="tab-region" class="tab-btn">지역명 검색</button>
+            <button id="tab-substation" class="tab-btn active">변전소명</button>
+            <button id="tab-region" class="tab-btn">지역명</button>
+            <button id="tab-address" class="tab-btn">주소로 지도보기</button>
         </div>
 
         <!-- 검색 입력창 & 버튼 -->
@@ -407,6 +397,7 @@
             </div>
             <button id="search-btn">검색</button>
         </div>
+        <p class="search-hint" id="search-hint" style="display:none;">주소를 입력하면 주변 변전소를 지도에서 보여드려요. (예: 서울 중구 세종대로 110)</p>
 
         <div id="results-container">
             <div class="msg-box">검색어를 입력해주세요.</div>
@@ -420,9 +411,17 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbw42mXcNkti5dTKKXo-dNpocNZyHNqcA7dIH_AQw2SQA5uRiRsJ1dBTu23iioWsZsI/exec";
         const TARGET_HASH = "698eddbc91b225fd427a99e6d0c194e32cb8c99dd4322cb25c5cd52c52184ef2";
 
-        // IRONWEB 전력 인프라 지도 (mav-ash.com)
-        const IRONWEB_BASE = "https://www.mav-ash.com/ironweb/?hl=ko-KR";
-        const IRONWEB_ZOOM = 15;
+        // OpenInfraMap: 전력 인프라 전용 지도. 변전소명 검색 API 지원 + URL 해시로 실제 줌인 가능.
+        const OIM_BASE = "https://openinframap.org";
+        const OIM_SEARCH_URL = "https://openinframap.org/search/typeahead";
+        const OIM_ZOOM_SUBSTATION = 16;
+        const OIM_ZOOM_ADDRESS = 13;
+
+        // IRONWEB: 보조 링크로만 사용 (자동 줌인 미지원, 새 창에서 열기 전용)
+        const IRONWEB_URL = "https://www.mav-ash.com/ironweb/?hl=ko-KR";
+
+        // 주소 → 좌표 변환용 (무료 공개 Nominatim API)
+        const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
         // ----------------------------------------------------
         // 전역 상태 변수
@@ -431,10 +430,10 @@
         let isDataLoaded = false;
         let currentTab = 'substation';
         let searchToken = 0; // 비동기 지도 로딩 경쟁 상태 방지용
-        const geocodeCache = {};
+        const mapCache = {};
 
         // ----------------------------------------------------
-        // 유틸리티: SHA-256 해시 함수
+        // 유틸리티
         // ----------------------------------------------------
         async function sha256(message) {
             const msgBuffer = new TextEncoder().encode(message);
@@ -449,7 +448,6 @@
             }[c]));
         }
 
-        // 검색어가 포함된 부분에 노란색 하이라이트 적용
         function highlightMatch(text, keyword) {
             const safeText = text == null ? "" : String(text);
             if (!keyword) return escapeHtml(safeText);
@@ -462,6 +460,64 @@
         }
 
         function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+        function buildOimUrl(lat, lng, zoom) {
+            return `${OIM_BASE}/#${zoom}/${lat}/${lng}`;
+        }
+
+        // OpenInfraMap 변전소/발전소 이름 검색 (실제 인프라 DB 검색, 좌표 직접 반환)
+        async function searchOIM(query) {
+            const cacheKey = `oim:${query}`;
+            if (cacheKey in mapCache) return mapCache[cacheKey];
+            let result = null;
+            try {
+                const url = `${OIM_SEARCH_URL}?q=${encodeURIComponent(query)}&limit=1`;
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    const first = data && data.results && data.results[0];
+                    if (first && first.geometry && first.geometry.coordinates) {
+                        const [lng, lat] = first.geometry.coordinates;
+                        result = { lat, lng, name: first.name };
+                    }
+                }
+            } catch (e) { result = null; }
+            mapCache[cacheKey] = result;
+            return result;
+        }
+
+        // 일반 주소/지명 좌표 변환 (OpenStreetMap Nominatim, 무료 공개 API)
+        async function geocodeNominatim(query) {
+            const cacheKey = `nom:${query}`;
+            if (cacheKey in mapCache) return mapCache[cacheKey];
+            let result = null;
+            try {
+                const url = `${NOMINATIM_URL}?format=json&countrycodes=kr&limit=1&q=${encodeURIComponent(query)}`;
+                const res = await fetch(url, { headers: { 'Accept-Language': 'ko' } });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
+                    }
+                }
+            } catch (e) { result = null; }
+            mapCache[cacheKey] = result;
+            return result;
+        }
+
+        // 변전소명 → 좌표. OpenInfraMap 인프라 검색을 우선 시도하고, 안 되면 일반 지오코딩으로 보완.
+        async function resolveSubstationLocation(name, region) {
+            let hit = await searchOIM(`${name}변전소`);
+            if (!hit) { await sleep(250); hit = await searchOIM(name); }
+            if (hit) return { lat: hit.lat, lng: hit.lng, source: 'oim' };
+
+            await sleep(250);
+            let coord = await geocodeNominatim(`${name}변전소`);
+            if (!coord) { await sleep(300); coord = await geocodeNominatim(region); }
+            if (coord) return { lat: coord.lat, lng: coord.lng, source: 'nominatim' };
+
+            return null;
+        }
 
         // ----------------------------------------------------
         // 로그인
@@ -485,19 +541,30 @@
 
         document.getElementById('tab-substation').addEventListener('click', () => switchTab('substation'));
         document.getElementById('tab-region').addEventListener('click', () => switchTab('region'));
+        document.getElementById('tab-address').addEventListener('click', () => switchTab('address'));
 
         function switchTab(tabName) {
             currentTab = tabName;
             const searchInput = document.getElementById('search-input');
+            const searchBtn = document.getElementById('search-btn');
+            const hint = document.getElementById('search-hint');
+
+            ['substation', 'region', 'address'].forEach(name => {
+                document.getElementById(`tab-${name}`).classList.toggle('active', name === tabName);
+            });
 
             if (tabName === 'substation') {
-                document.getElementById('tab-substation').classList.add('active');
-                document.getElementById('tab-region').classList.remove('active');
                 searchInput.placeholder = "예: 가락, 마포, 신길";
-            } else {
-                document.getElementById('tab-region').classList.add('active');
-                document.getElementById('tab-substation').classList.remove('active');
+                searchBtn.textContent = "검색";
+                hint.style.display = 'none';
+            } else if (tabName === 'region') {
                 searchInput.placeholder = "예: 서울, 송파, 가락동";
+                searchBtn.textContent = "검색";
+                hint.style.display = 'none';
+            } else {
+                searchInput.placeholder = "예: 서울 중구 세종대로 110";
+                searchBtn.textContent = "지도보기";
+                hint.style.display = 'block';
             }
 
             searchInput.value = "";
@@ -505,7 +572,7 @@
             searchInput.focus();
         }
 
-        // 최초 검색 시 서버에서 데이터 가져오기
+        // 최초 검색 시 서버에서 여유용량 데이터 가져오기
         async function fetchAndSearch(keyword) {
             const container = document.getElementById('results-container');
             container.innerHTML = `<div class="msg-box loading">데이터를 불러오는 중입니다... 잠시만 기다려주세요.</div>`;
@@ -535,6 +602,11 @@
                 return;
             }
 
+            if (currentTab === 'address') {
+                await executeAddressSearch(keyword);
+                return;
+            }
+
             if (!isDataLoaded) {
                 await fetchAndSearch(keyword);
             } else {
@@ -548,7 +620,7 @@
         });
 
         // ----------------------------------------------------
-        // 결과 렌더링
+        // 변전소명 / 지역명 검색 결과 렌더링
         // ----------------------------------------------------
         function renderResults(keyword) {
             searchToken += 1;
@@ -572,7 +644,7 @@
                 return;
             }
 
-            const mapTargets = []; // 지도 로딩이 필요한 카드 정보 모음
+            const mapTargets = [];
 
             filteredData.forEach((item, idx) => {
                 const card = document.createElement('div');
@@ -608,7 +680,7 @@
                     <div class="card-region">${regionHtml}</div>
 
                     <div class="voltage-block">
-                        <span class="voltage-label">22.9kV 여유용량</span>
+                        <span class="voltage-label">23kV 여유용량</span>
                         ${kv23Html}
                     </div>
 
@@ -619,7 +691,7 @@
 
                     ${currentTab === 'substation' ? `
                     <div class="map-section">
-                        <div class="map-section-label">🗺️ 변전소 위치 (IRONWEB)</div>
+                        <div class="map-section-label">🗺️ 변전소 위치</div>
                         <div class="map-box" id="${mapBoxId}">
                             <div class="map-status">지도 위치를 찾는 중...</div>
                         </div>
@@ -633,88 +705,81 @@
             });
 
             if (mapTargets.length > 0) {
-                loadMapsSequentially(mapTargets, myToken);
+                loadCardMapsSequentially(mapTargets, myToken);
             }
         }
 
-        // ----------------------------------------------------
-        // 지도 연동 (IRONWEB / mav-ash.com)
-        //
-        // 좌표는 OpenStreetMap Nominatim으로 조회합니다(무료 공개 API).
-        // Nominatim 사용 정책상 과도한 연속 호출을 피하기 위해
-        // 카드 하나씩 순차적으로, 약간의 간격을 두고 조회합니다.
-        // ----------------------------------------------------
-        async function geocodeSubstation(substation, region) {
-            const cacheKey = `${substation}|${region}`;
-            if (geocodeCache[cacheKey]) return geocodeCache[cacheKey];
-
-            const tryQuery = async (q) => {
-                const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=kr&limit=1&q=${encodeURIComponent(q)}`;
-                const res = await fetch(url, { headers: { 'Accept-Language': 'ko' } });
-                if (!res.ok) return null;
-                const data = await res.json();
-                if (data && data.length > 0) {
-                    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-                }
-                return null;
-            };
-
-            let coord = null;
-            try {
-                coord = await tryQuery(`${substation}변전소`);
-                if (!coord) {
-                    await sleep(300);
-                    coord = await tryQuery(region);
-                }
-            } catch (e) {
-                coord = null;
-            }
-
-            if (coord) geocodeCache[cacheKey] = coord;
-            return coord;
-        }
-
-        function buildIronwebUrl(coord) {
-            // MapLibre 표준 해시 형식(#줌/위도/경도)입니다.
-            // 현재 IRONWEB 사이트는 URL 해시로 초기 위치를 읽지 않아
-            // 즉시 확대되지는 않지만, 향후 사이트에 hash 옵션이 켜지면
-            // 별도 수정 없이 바로 동작합니다.
-            return `${IRONWEB_BASE}#${IRONWEB_ZOOM}/${coord.lat}/${coord.lng}`;
-        }
-
-        async function loadMapsSequentially(targets, myToken) {
+        async function loadCardMapsSequentially(targets, myToken) {
             for (const target of targets) {
-                if (myToken !== searchToken) return; // 새 검색이 시작되면 중단
+                if (myToken !== searchToken) return;
 
                 const box = document.getElementById(target.boxId);
                 if (!box) continue;
 
-                const coord = await geocodeSubstation(target.substation, target.region);
+                const loc = await resolveSubstationLocation(target.substation, target.region);
 
                 if (myToken !== searchToken) return;
                 if (!box.isConnected) continue;
 
-                if (coord) {
-                    const mapUrl = buildIronwebUrl(coord);
+                if (loc) {
+                    const oimUrl = buildOimUrl(loc.lat, loc.lng, OIM_ZOOM_SUBSTATION);
                     box.outerHTML = `
                         <div class="map-box" id="${target.boxId}">
-                            <a class="map-frame-link" href="${mapUrl}" target="_blank" rel="noopener"
+                            <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
                                aria-label="${escapeHtml(target.substation)} 변전소 위치, 새 창에서 크게 보기">
-                                <iframe src="${mapUrl}" loading="lazy" tabindex="-1"
+                                <iframe src="${oimUrl}" loading="lazy" tabindex="-1"
                                         title="${escapeHtml(target.substation)} 변전소 위치"></iframe>
                                 <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
                             </a>
-                        </div>`;
+                        </div>
+                        <div class="map-caption">OpenInfraMap 기준 위치 · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>`;
                 } else {
                     box.innerHTML = `
                         <div class="map-status">
                             정확한 위치를 찾지 못했습니다.<br>
-                            <a class="map-fallback-link" href="${IRONWEB_BASE}" target="_blank" rel="noopener">IRONWEB 지도에서 직접 검색 ↗</a>
+                            <a class="map-fallback-link" href="${OIM_BASE}" target="_blank" rel="noopener">OpenInfraMap에서 직접 검색 ↗</a><br>
+                            <a class="map-fallback-link" href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서 직접 검색 ↗</a>
                         </div>`;
                 }
 
-                await sleep(350); // Nominatim 연속 호출 간격
+                await sleep(300); // 공개 API 연속 호출 간격 예의
             }
+        }
+
+        // ----------------------------------------------------
+        // 주소로 주변 변전소 지도 보기
+        // ----------------------------------------------------
+        async function executeAddressSearch(address) {
+            searchToken += 1;
+            const myToken = searchToken;
+
+            const container = document.getElementById('results-container');
+            container.innerHTML = `<div class="msg-box loading">주소를 찾는 중입니다...</div>`;
+
+            const coord = await geocodeNominatim(address);
+
+            if (myToken !== searchToken) return;
+
+            if (!coord) {
+                container.innerHTML = `<div class="msg-box error">주소를 찾지 못했습니다.<br>시/군/구까지 포함해서 다시 입력해보세요.</div>`;
+                return;
+            }
+
+            const oimUrl = buildOimUrl(coord.lat, coord.lng, OIM_ZOOM_ADDRESS);
+
+            container.innerHTML = `
+                <div class="card">
+                    <div class="address-note">📍 ${escapeHtml(coord.label || address)}</div>
+                    <div class="map-section-label">🗺️ 주변 전력 인프라 (변전소·송전선·발전소)</div>
+                    <div class="map-box">
+                        <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
+                           aria-label="주소 주변 지도, 새 창에서 크게 보기">
+                            <iframe src="${oimUrl}" loading="lazy" tabindex="-1" title="주소 주변 전력 인프라"></iframe>
+                            <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
+                        </a>
+                    </div>
+                    <div class="map-caption">OpenInfraMap 기준 위치 · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>
+                </div>`;
         }
     </script>
 </body>
