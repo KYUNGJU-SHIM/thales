@@ -411,16 +411,22 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbw42mXcNkti5dTKKXo-dNpocNZyHNqcA7dIH_AQw2SQA5uRiRsJ1dBTu23iioWsZsI/exec";
         const TARGET_HASH = "698eddbc91b225fd427a99e6d0c194e32cb8c99dd4322cb25c5cd52c52184ef2";
 
-        // OpenInfraMap: 전력 인프라 전용 지도. 변전소명 검색 API 지원 + URL 해시로 실제 줌인 가능.
+        // OpenInfraMap: 전력 인프라 전용 지도.
+        // ⚠ 실사용 중 확인된 사실: openinframap.org는 X-Frame-Options:deny 를 내려보내
+        //   페이지 안(iframe)에는 표시할 수 없고, /search/typeahead API도 CORS를
+        //   허용하지 않아 브라우저에서 직접 fetch() 할 수 없습니다.
+        //   → 미리보기 지도로는 쓸 수 없고, "새 창에서 열기" 링크(실제 페이지 이동)로만 사용합니다.
         const OIM_BASE = "https://openinframap.org";
-        const OIM_SEARCH_URL = "https://openinframap.org/search/typeahead";
         const OIM_ZOOM_SUBSTATION = 16;
         const OIM_ZOOM_ADDRESS = 13;
 
         // IRONWEB: 보조 링크로만 사용 (자동 줌인 미지원, 새 창에서 열기 전용)
         const IRONWEB_URL = "https://www.mav-ash.com/ironweb/?hl=ko-KR";
 
-        // 주소 → 좌표 변환용 (무료 공개 Nominatim API)
+        // 미리보기(iframe)는 임베드가 공식 허용된 OpenStreetMap 위젯을 사용합니다.
+        const OSM_EMBED_URL = "https://www.openstreetmap.org/export/embed.html";
+
+        // 주소 → 좌표 변환용 (무료 공개 Nominatim API, CORS 허용됨)
         const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
         // ----------------------------------------------------
@@ -465,29 +471,18 @@
             return `${OIM_BASE}/#${zoom}/${lat}/${lng}`;
         }
 
-        // OpenInfraMap 변전소/발전소 이름 검색 (실제 인프라 DB 검색, 좌표 직접 반환)
-        async function searchOIM(query) {
-            const cacheKey = `oim:${query}`;
-            if (cacheKey in mapCache) return mapCache[cacheKey];
-            let result = null;
-            try {
-                const url = `${OIM_SEARCH_URL}?q=${encodeURIComponent(query)}&limit=1`;
-                const res = await fetch(url);
-                if (res.ok) {
-                    const data = await res.json();
-                    const first = data && data.results && data.results[0];
-                    if (first && first.geometry && first.geometry.coordinates) {
-                        const [lng, lat] = first.geometry.coordinates;
-                        result = { lat, lng, name: first.name };
-                    }
-                }
-            } catch (e) { result = null; }
-            mapCache[cacheKey] = result;
-            return result;
+        // OSM 공식 임베드 위젯 URL (미리보기용). delta가 클수록 더 넓은 범위를 보여줍니다.
+        function buildOsmEmbedUrl(lat, lng, delta) {
+            const minLon = lng - delta;
+            const maxLon = lng + delta;
+            const minLat = lat - delta * 0.7;
+            const maxLat = lat + delta * 0.7;
+            const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
+            return `${OSM_EMBED_URL}?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(lat + ',' + lng)}`;
         }
 
-        // 일반 주소/지명 좌표 변환 (OpenStreetMap Nominatim, 무료 공개 API)
-        async function geocodeNominatim(query) {
+        // 일반 주소/지명 좌표 변환 (OpenStreetMap Nominatim, 무료 공개 API — CORS 허용됨)
+        async function geocodeNominatimRaw(query) {
             const cacheKey = `nom:${query}`;
             if (cacheKey in mapCache) return mapCache[cacheKey];
             let result = null;
@@ -505,17 +500,29 @@
             return result;
         }
 
-        // 변전소명 → 좌표. OpenInfraMap 인프라 검색을 우선 시도하고, 안 되면 일반 지오코딩으로 보완.
+        // 주소 하나로 안 될 때, 뒤 단어부터 하나씩 줄여가며 재시도합니다.
+        // 예: "서울특별시 금천구 범안로17길 41" 실패 시
+        //     → "서울특별시 금천구 범안로17길" → "서울특별시 금천구" 순으로 재시도
+        async function geocodeNominatim(query) {
+            const tokens = query.trim().split(/\s+/);
+            const minLen = Math.min(2, tokens.length);
+            for (let len = tokens.length; len >= minLen; len--) {
+                const attempt = tokens.slice(0, len).join(' ');
+                const result = await geocodeNominatimRaw(attempt);
+                if (result) {
+                    result.approx = len < tokens.length; // 원문 일부만으로 찾은 경우
+                    return result;
+                }
+                if (len > minLen) await sleep(300);
+            }
+            return null;
+        }
+
+        // 변전소명 → 좌표 (Nominatim 지오코딩)
         async function resolveSubstationLocation(name, region) {
-            let hit = await searchOIM(`${name}변전소`);
-            if (!hit) { await sleep(250); hit = await searchOIM(name); }
-            if (hit) return { lat: hit.lat, lng: hit.lng, source: 'oim' };
-
-            await sleep(250);
-            let coord = await geocodeNominatim(`${name}변전소`);
+            let coord = await geocodeNominatimRaw(`${name}변전소`);
             if (!coord) { await sleep(300); coord = await geocodeNominatim(region); }
-            if (coord) return { lat: coord.lat, lng: coord.lng, source: 'nominatim' };
-
+            if (coord) return { lat: coord.lat, lng: coord.lng };
             return null;
         }
 
@@ -680,7 +687,7 @@
                     <div class="card-region">${regionHtml}</div>
 
                     <div class="voltage-block">
-                        <span class="voltage-label">23kV 여유용량</span>
+                        <span class="voltage-label">22.9kV 여유용량</span>
                         ${kv23Html}
                     </div>
 
@@ -722,17 +729,18 @@
                 if (!box.isConnected) continue;
 
                 if (loc) {
+                    const previewUrl = buildOsmEmbedUrl(loc.lat, loc.lng, 0.004);
                     const oimUrl = buildOimUrl(loc.lat, loc.lng, OIM_ZOOM_SUBSTATION);
                     box.outerHTML = `
                         <div class="map-box" id="${target.boxId}">
                             <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
-                               aria-label="${escapeHtml(target.substation)} 변전소 위치, 새 창에서 크게 보기">
-                                <iframe src="${oimUrl}" loading="lazy" tabindex="-1"
+                               aria-label="${escapeHtml(target.substation)} 변전소 위치, 새 창에서 전력 인프라 지도로 보기">
+                                <iframe src="${previewUrl}" loading="lazy" tabindex="-1"
                                         title="${escapeHtml(target.substation)} 변전소 위치"></iframe>
-                                <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
+                                <span class="map-open-badge">OpenInfraMap 새 창에서 보기 ↗</span>
                             </a>
                         </div>
-                        <div class="map-caption">OpenInfraMap 기준 위치 · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>`;
+                        <div class="map-caption">지도 위치 참고용(OSM) · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>`;
                 } else {
                     box.innerHTML = `
                         <div class="map-status">
@@ -761,24 +769,32 @@
             if (myToken !== searchToken) return;
 
             if (!coord) {
-                container.innerHTML = `<div class="msg-box error">주소를 찾지 못했습니다.<br>시/군/구까지 포함해서 다시 입력해보세요.</div>`;
+                container.innerHTML = `
+                    <div class="msg-box error">
+                        주소를 찾지 못했습니다.<br>
+                        도로명 앞에 시/구를 정확히 붙여서(예: 서울특별시 금천구 범안로17길 41) 다시 입력해보시거나,<br>
+                        건물명·상세 번지는 빼고 도로명까지만 입력해보세요.
+                    </div>`;
                 return;
             }
 
+            const previewUrl = buildOsmEmbedUrl(coord.lat, coord.lng, 0.012);
             const oimUrl = buildOimUrl(coord.lat, coord.lng, OIM_ZOOM_ADDRESS);
+            const approxNote = coord.approx ? `<div class="map-caption" style="margin-top:0;margin-bottom:8px;">※ 입력하신 주소 전체와 정확히 일치하지 않아, 일부만으로 찾은 근사 위치입니다.</div>` : ``;
 
             container.innerHTML = `
                 <div class="card">
                     <div class="address-note">📍 ${escapeHtml(coord.label || address)}</div>
-                    <div class="map-section-label">🗺️ 주변 전력 인프라 (변전소·송전선·발전소)</div>
+                    ${approxNote}
+                    <div class="map-section-label">🗺️ 주변 지도 미리보기</div>
                     <div class="map-box">
                         <a class="map-frame-link" href="${oimUrl}" target="_blank" rel="noopener"
-                           aria-label="주소 주변 지도, 새 창에서 크게 보기">
-                            <iframe src="${oimUrl}" loading="lazy" tabindex="-1" title="주소 주변 전력 인프라"></iframe>
-                            <span class="map-open-badge">새 창에서 크게 보기 ↗</span>
+                           aria-label="주소 주변 지도, 새 창에서 전력 인프라 지도로 보기">
+                            <iframe src="${previewUrl}" loading="lazy" tabindex="-1" title="주소 주변 지도"></iframe>
+                            <span class="map-open-badge">OpenInfraMap 새 창에서 보기 ↗</span>
                         </a>
                     </div>
-                    <div class="map-caption">OpenInfraMap 기준 위치 · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>
+                    <div class="map-caption">주변 변전소·송전선까지 보려면 위 버튼으로 OpenInfraMap을 열어보세요 · <a href="${IRONWEB_URL}" target="_blank" rel="noopener">IRONWEB에서도 보기 ↗</a></div>
                 </div>`;
         }
     </script>
